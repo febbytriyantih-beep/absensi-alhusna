@@ -26,9 +26,106 @@ header{background:linear-gradient(135deg,var(--p2),var(--p));color:#fff;padding:
 <div id="modal" class="modal"><div class="modalbox"><div class="top"><h2 id="mtitle">Tambah Siswa</h2><button class="btn btn-light" onclick="closeModal()">✕</button></div><input type="hidden" id="fId"><div class="formgrid"><label>NIS<input id="fNis"></label><label>Nama Lengkap<input id="fNama"></label><label>Kelas<input id="fKelas"></label><label>Jenis Kelamin<select id="fJk"><option value="">-</option><option>L</option><option>P</option></select></label><label>No. HP Orang Tua<input id="fHp"></label><label>Foto URL<input id="fFoto"></label></div><label><input type="checkbox" id="fAktif" checked style="width:auto"> Siswa aktif</label><div id="smsg"></div><div class="actions"><button class="btn btn-primary" onclick="saveStudent()">💾 Simpan</button><button class="btn btn-light" onclick="closeModal()">Batal</button></div></div></div>
 
 <script>
-const S={students:[],settings:{}};let scanner=null,running=false,lastCode='',lastTime=0;
+const API_URL = "https://script.google.com/macros/s/AKfycbwTFxEPnSPO6TjuAU8fJPhhqlD3ouHnZJVbp_Ab01GtaukYT1kolwLkpoVbMPGBDjiOCA/exec";
+async function api(action, data = {}) {
+
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      action: action,
+      ...data
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error("Server Google Script tidak merespons.");
+  }
+
+  return await response.json();
+}
+const S = {
+  students: [],
+  settings: {}
+};;let scanner=null,running=false,lastCode='',lastTime=0;
 function page(n,b){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById('page-'+n).classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));if(b)b.classList.add('active');if(n==='print')renderQR()}
-function loadAll(){google.script.run.withSuccessHandler(d=>{document.getElementById('total').textContent=d.totalStudents;document.getElementById('today').textContent=d.totalAttendanceToday;document.getElementById('hadir').textContent=d.hadirToday;document.getElementById('late').textContent=d.lateToday;document.getElementById('cutoff').textContent=d.cutoff;document.getElementById('schoolName').textContent=d.school;document.getElementById('todayBody').innerHTML=(d.attendanceToday||[]).map(r=>`<tr><td>${e(r.JAM)}</td><td>${e(r.NIS)}</td><td>${e(r.NAMA)}</td><td>${e(r.KELAS)}</td><td><b>${e(r.STATUS)}</b></td></tr>`).join('')||'<tr><td colspan="5">Belum ada absensi.</td></tr>'}).getAppData();google.script.run.withSuccessHandler(x=>{S.students=x||[];renderStudents();classes();renderQR()}).getStudents();google.script.run.withSuccessHandler(x=>{S.settings=x;setv('setSchool',x.school);setv('setCutoff',x.cutoff);setv('setApp',x.appName)}).getSettings()}
+async function loadAll() {
+
+  try {
+
+    const d = await api("dashboard");
+
+    if (!d.ok) {
+      throw new Error(d.message || "Gagal mengambil dashboard.");
+    }
+
+    const x = d.data;
+
+    document.getElementById("total").textContent =
+      x.totalStudents || 0;
+
+    document.getElementById("today").textContent =
+      x.totalAttendanceToday || 0;
+
+    document.getElementById("hadir").textContent =
+      x.hadirToday || 0;
+
+    document.getElementById("late").textContent =
+      x.lateToday || 0;
+
+    document.getElementById("cutoff").textContent =
+      x.cutoff || "07:00";
+
+    document.getElementById("schoolName").textContent =
+      x.school || "SMPIT Al-Husna";
+
+    document.getElementById("todayBody").innerHTML =
+      (x.attendanceToday || []).map(r => `
+        <tr>
+          <td>${e(r.JAM)}</td>
+          <td>${e(r.NIS)}</td>
+          <td>${e(r.NAMA)}</td>
+          <td>${e(r.KELAS)}</td>
+          <td><b>${e(r.STATUS)}</b></td>
+        </tr>
+      `).join("")
+      ||
+      '<tr><td colspan="5">Belum ada absensi.</td></tr>';
+
+    const students = await api("students");
+
+    if (students.ok) {
+      S.students = students.data || [];
+      renderStudents();
+      classes();
+      renderQR();
+    }
+
+    const settings = await api("settings");
+
+    if (settings.ok) {
+
+      S.settings = settings.data;
+
+      setv("setSchool", settings.data.school);
+      setv("setCutoff", settings.data.cutoff);
+      setv("setApp", settings.data.appName);
+    }
+
+  } catch (err) {
+
+    console.error(err);
+
+    document.getElementById("camStatus").className =
+      "status err";
+
+    document.getElementById("camStatus").textContent =
+      "❌ Tidak dapat terhubung ke Google Apps Script: " +
+      err.message;
+  }
+}
 function startScan(){if(running)return;const st=document.getElementById('camStatus');st.className='status info';st.innerHTML='Meminta izin kamera... pilih <b>Izinkan / Allow</b> jika diminta.';if(!window.Html5Qrcode){st.className='status err';st.textContent='Library scanner belum termuat. Refresh halaman.';return}scanner=new Html5Qrcode('reader');const cfg={fps:10,qrbox:(w,h)=>({width:Math.floor(Math.min(w,h)*.7),height:Math.floor(Math.min(w,h)*.7)}),rememberLastUsedCamera:true,showTorchButtonIfSupported:true,formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.CODE_93,Html5QrcodeSupportedFormats.CODABAR,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E]};scanner.start({facingMode:'environment'},cfg,x=>scan(x),()=>{}).then(()=>{running=true;st.className='status ok';st.innerHTML='🟢 Kamera aktif. Arahkan QR/barcode ke kotak.'}).catch(err=>{running=false;scanner=null;st.className='status err';st.innerHTML=(String(err).toLowerCase().includes('permission')||err.name==='NotAllowedError')?'❌ Kamera ditolak. Klik 🔒 kiri alamat website → Kamera → Izinkan → refresh.':'❌ Kamera gagal: '+e(err)})}
 function stopScan(){if(scanner&&running)scanner.stop().then(()=>scanner.clear()).catch(()=>{});scanner=null;running=false;document.getElementById('camStatus').className='status info';document.getElementById('camStatus').textContent='Kamera berhenti.'}
 function scan(code){const now=Date.now();if(code===lastCode&&now-lastTime<2500)return;lastCode=code;lastTime=now;stopScan();document.getElementById('result').innerHTML='<div class="status info">⏳ Menyimpan...</div>';google.script.run.withSuccessHandler(r=>{if(r.ok){document.getElementById('result').innerHTML=`<div class="status ok">✅ ${e(r.message)}</div><h2>${e(r.student.NAMA)}</h2><p>NIS ${e(r.student.NIS)} • Kelas ${e(r.student.KELAS)}</p><p style="font-size:28px"><b>${e(r.attendance.JAM)}</b></p><p>Status: <b>${e(r.attendance.STATUS)}</b></p>`;loadAll();setTimeout(startScan,1800)}else{document.getElementById('result').innerHTML=`<div class="status ${r.type==='DUPLICATE'?'info':'err'}">⚠ ${e(r.message)}</div>${r.student?'<p><b>'+e(r.student.NAMA)+'</b> — '+e(r.student.KELAS)+'</p>':''}<button class="btn btn-primary" onclick="startScan()">📷 Scan Lagi</button>`}}).withFailureHandler(x=>document.getElementById('result').innerHTML='<div class="status err">Gagal: '+e(x.message)+'</div><button class="btn btn-primary" onclick="startScan()">Scan Lagi</button>').recordAttendance(code)}
@@ -41,8 +138,172 @@ function saveStudent(){const d={id:v('fId'),nis:v('fNis'),nama:v('fNama'),kelas:
 function del(id){if(confirm('Hapus data siswa?'))google.script.run.withSuccessHandler(r=>{alert(r.message);loadAll()}).withFailureHandler(x=>alert(x.message)).deleteStudent(id)}
 function renderQR(){const f=document.getElementById('printClass')?.value||'',a=S.students.filter(s=>!f||String(s.KELAS)===f),box=document.getElementById('qrCards');box.innerHTML=a.map((s,i)=>`<div class="qr-card"><b>SMPIT AL-HUSNA</b><div class="qr" id="q${i}"></div><h3>${e(s.NAMA)}</h3><div>NIS: <b>${e(s.NIS)}</b></div><div>Kelas: ${e(s.KELAS)}</div><small>${e(s.ID)}</small></div>`).join('')||'<div class="card">Belum ada data siswa.</div>';a.forEach((s,i)=>window.QRCode&&new QRCode(document.getElementById('q'+i),{text:s.ID,width:150,height:150,correctLevel:QRCode.CorrectLevel.M}))}
 function report(){const f={dateFrom:v('from'),dateTo:v('to'),kelas:v('reportClass'),keyword:v('keyword')};google.script.run.withSuccessHandler(a=>document.getElementById('reportBody').innerHTML=(a||[]).map(r=>`<tr><td>${e(fmt(r.TANGGAL))}</td><td>${e(r.JAM)}</td><td>${e(r.NIS)}</td><td>${e(r.NAMA)}</td><td>${e(r.KELAS)}</td><td><b>${e(r.STATUS)}</b></td><td>${e(r.METODE)}</td></tr>`).join('')||'<tr><td colspan="7">Data tidak ditemukan.</td></tr>').getAttendance(f)}
-function csv(){const f={dateFrom:v('from'),dateTo:v('to'),kelas:v('reportClass'),keyword:v('keyword')};google.script.run.withSuccessHandler(x=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\\ufeff'+x],{type:'text/csv'}));a.download='laporan-absensi.csv';a.click()}).exportAttendanceCsv(f)}
+function csv(){const f={dateFrom:v('from'),dateTo:v('to'),kelas:v('reportClass'),keyword:v('keyword')};async function scan(code) {
+
+  const now = Date.now();
+
+  if (code === lastCode && now - lastTime < 2500) {
+    return;
+  }
+
+  lastCode = code;
+  lastTime = now;
+
+  stopScan();
+
+  document.getElementById("result").innerHTML =
+    '<div class="status info">⏳ Menyimpan absensi...</div>';
+
+  try {
+
+    const r = await api("attendance", {
+      code: code
+    });
+
+    if (r.ok) {
+
+      document.getElementById("result").innerHTML = `
+        <div class="status ok">
+          ✅ ${e(r.message)}
+        </div>
+
+        <h2>${e(r.student.NAMA)}</h2>
+
+        <p>
+          NIS ${e(r.student.NIS)}
+          • Kelas ${e(r.student.KELAS)}
+        </p>
+
+        <p style="font-size:28px">
+          <b>${e(r.attendance.JAM)}</b>
+        </p>
+
+        <p>
+          Status:
+          <b>${e(r.attendance.STATUS)}</b>
+        </p>
+      `;
+
+      loadAll();
+
+      setTimeout(startScan, 1800);
+
+    } else {
+
+      document.getElementById("result").innerHTML = `
+        <div class="status ${
+          r.type === "DUPLICATE" ? "info" : "err"
+        }">
+          ⚠ ${e(r.message)}
+        </div>
+
+        ${
+          r.student
+          ?
+          `<p>
+             <b>${e(r.student.NAMA)}</b>
+             — ${e(r.student.KELAS)}
+           </p>`
+          :
+          ""
+        }
+
+        <button
+          class="btn btn-primary"
+          onclick="startScan()">
+          📷 Scan Lagi
+        </button>
+      `;
+    }
+
+  } catch (err) {
+
+    console.error(err);
+
+    document.getElementById("result").innerHTML = `
+      <div class="status err">
+        ❌ Gagal terhubung ke Google Script:
+        ${e(err.message)}
+      </div>
+
+      <button
+        class="btn btn-primary"
+        onclick="startScan()">
+        📷 Scan Lagi
+      </button>
+    `;
+  }
+}(x=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\\ufeff'+x],{type:'text/csv'}));a.download='laporan-absensi.csv';a.click()}).exportAttendanceCsv(f)}
 function saveSet(){google.script.run.withSuccessHandler(r=>{document.getElementById('setMsg').innerHTML='<div class="status ok">'+e(r.message)+'</div>';loadAll()}).withFailureHandler(x=>document.getElementById('setMsg').innerHTML='<div class="status err">'+e(x.message)+'</div>').saveSettings({school:v('setSchool'),cutoff:v('setCutoff'),appName:v('setApp')})}
 function v(id){return document.getElementById(id).value.trim()}function setv(id,x){document.getElementById(id).value=x??''}function e(x){return String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}function fmt(x){const s=String(x??'');return s.replace(/^(\\d{4})-(\\d{2})-(\\d{2}).*/,'$3/$2/$1')}
 window.addEventListener('load',()=>{const d=new Date(),x=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);setv('from',x);setv('to',x);loadAll()});
 </script></body></html>
+
+function doPost(e) {
+
+  try {
+
+    const data =
+      JSON.parse(e.postData.contents || "{}");
+
+    const action = data.action || "";
+
+    switch (action) {
+
+      case "attendance":
+        return json_(
+          recordAttendance(data.code)
+        );
+
+      case "dashboard":
+        return json_({
+          ok: true,
+          data: getAppData()
+        });
+
+      case "students":
+        return json_({
+          ok: true,
+          data: getStudents()
+        });
+
+      case "settings":
+        return json_({
+          ok: true,
+          data: getSettings()
+        });
+
+      case "attendance_list":
+        return json_({
+          ok: true,
+          data: getAttendance(data.filter || {})
+        });
+
+      default:
+
+        return json_({
+          ok: false,
+          message: "Action tidak dikenal: " + action
+        });
+    }
+
+  } catch (err) {
+
+    return json_({
+      ok: false,
+      message: err.message || String(err)
+    });
+  }
+}
+
+
+function json_(data) {
+
+  return ContentService
+    .createTextOutput(
+      JSON.stringify(data)
+    )
+    .setMimeType(
+      ContentService.MimeType.JSON
+    );
+}
