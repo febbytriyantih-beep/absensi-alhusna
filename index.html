@@ -43,12 +43,14 @@ async function api(action, data = {}) {
   if (!response.ok) {
     throw new Error("Server Google Script tidak merespons.");
   }
-
   return await response.json();
 }
+const API_URL = "https://script.google.com/macros/s/AKfycbwTFxEPnSPO6TjuAU8fJPhhqlD3ouHnZJVbp_Ab01GtaukYT1kolwLkpoVbMPGBDjiOCA/exec";
+
 const S = {
   students: [],
   settings: {}
+};
 };;let scanner=null,running=false,lastCode='',lastTime=0;
 function page(n,b){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById('page-'+n).classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));if(b)b.classList.add('active');if(n==='print')renderQR()}
 async function loadAll() {
